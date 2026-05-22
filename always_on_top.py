@@ -33,6 +33,7 @@ HCURSOR = wintypes.HANDLE
 
 APP_NAME = "窗口置顶工具"
 CLASS_NAME = "AlwaysOnTopTrayWindow"
+MUTEX_NAME = "Global\\ZhidAlwaysOnTopWindowUtility"
 HOTKEY_TOGGLE_ID = 1
 HOTKEY_EXIT_ID = 2
 TRAY_ID = 1
@@ -73,6 +74,7 @@ NIIF_INFO = 0x00000001
 NIIF_WARNING = 0x00000002
 
 IDI_APPLICATION = 32512
+ERROR_ALREADY_EXISTS = 183
 
 MF_STRING = 0x00000000
 MF_SEPARATOR = 0x00000800
@@ -235,6 +237,10 @@ shell32.Shell_NotifyIconW.restype = wintypes.BOOL
 
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+kernel32.CreateMutexW.restype = wintypes.HANDLE
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
 
 
 def check(result, message: str) -> None:
@@ -248,7 +254,8 @@ def truncate(text: str, limit: int) -> str:
 
 
 class AlwaysOnTopApp:
-    def __init__(self) -> None:
+    def __init__(self, mutex: wintypes.HANDLE) -> None:
+        self.mutex = mutex
         self.hinstance = kernel32.GetModuleHandleW(None)
         self.hwnd = wintypes.HWND()
         self.hicon = user32.LoadIconW(None, wintypes.LPCWSTR(IDI_APPLICATION))
@@ -387,6 +394,9 @@ class AlwaysOnTopApp:
         if self.exit_hotkey_registered:
             user32.UnregisterHotKey(self.hwnd, HOTKEY_EXIT_ID)
         self._remove_tray_icon()
+        if self.mutex:
+            kernel32.CloseHandle(self.mutex)
+            self.mutex = None
 
     def _show_menu(self) -> None:
         self._remember_foreground_window()
@@ -561,7 +571,13 @@ def main() -> int:
     if os.name != "nt":
         print("This tool only supports Windows.", file=sys.stderr)
         return 1
-    app = AlwaysOnTopApp()
+    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if not mutex:
+        raise ctypes.WinError(ctypes.get_last_error(), "CreateMutexW failed")
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        kernel32.CloseHandle(mutex)
+        return 0
+    app = AlwaysOnTopApp(mutex)
     return app.run()
 
 
