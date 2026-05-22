@@ -54,10 +54,13 @@ WM_DESTROY = 0x0002
 WM_COMMAND = 0x0111
 WM_TIMER = 0x0113
 WM_HOTKEY = 0x0312
+WM_CONTEXTMENU = 0x007B
 WM_APP = 0x8000
 WM_USER = 0x0400
 WM_LBUTTONUP = 0x0202
 WM_RBUTTONUP = 0x0205
+NIN_SELECT = WM_USER
+NIN_KEYSELECT = WM_USER + 1
 
 NIM_ADD = 0x00000000
 NIM_MODIFY = 0x00000001
@@ -253,6 +256,10 @@ def truncate(text: str, limit: int) -> str:
     return text if len(text) < limit else text[: limit - 1]
 
 
+def loword(value: int) -> int:
+    return value & 0xFFFF
+
+
 class AlwaysOnTopApp:
     def __init__(self, mutex: wintypes.HANDLE) -> None:
         self.mutex = mutex
@@ -374,8 +381,15 @@ class AlwaysOnTopApp:
             self._remember_foreground_window()
             return 0
         if msg == WM_TRAYICON:
-            mouse_msg = int(lparam)
-            if mouse_msg in (WM_RBUTTONUP, WM_LBUTTONUP):
+            tray_msg = int(lparam)
+            event = loword(tray_msg)
+            if tray_msg in (WM_RBUTTONUP, WM_LBUTTONUP, WM_CONTEXTMENU, NIN_SELECT, NIN_KEYSELECT) or event in (
+                WM_RBUTTONUP,
+                WM_LBUTTONUP,
+                WM_CONTEXTMENU,
+                NIN_SELECT,
+                NIN_KEYSELECT,
+            ):
                 self._show_menu()
             return 0
         if msg == WM_COMMAND:
