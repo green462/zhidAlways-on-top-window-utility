@@ -12,3 +12,5 @@ dist/
 *.spec
 package/
 *.zip
+!assets/*.png
+!assets/*.ico
