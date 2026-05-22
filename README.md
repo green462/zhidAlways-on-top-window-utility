@@ -2,6 +2,11 @@
 
 一个轻量的 Windows 托盘小工具，可以像微信聊天框那样把任意普通窗口置顶，不被其他窗口遮挡。
 
+## 下载打包版
+
+- [下载 exe](https://github.com/green462/zhidAlways-on-top-window-utility/releases/download/v1.0.0/AlwaysOnTopTool.exe)
+- [下载 zip](https://github.com/green462/zhidAlways-on-top-window-utility/releases/download/v1.0.0/AlwaysOnTopTool.zip)
+
 ## 使用方法
 
 1. 如果已下载打包版，双击 `窗口置顶工具.exe`；如果运行源码版，双击 `启动置顶工具.bat`。
