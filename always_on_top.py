@@ -33,7 +33,7 @@ HCURSOR = wintypes.HANDLE
 
 APP_NAME = "窗口置顶工具"
 CLASS_NAME = "AlwaysOnTopTrayWindow"
-MUTEX_NAME = "Global\\ZhidAlwaysOnTopWindowUtility"
+MUTEX_NAME = "Local\\ZhidAlwaysOnTopWindowUtility"
 HOTKEY_TOGGLE_ID = 1
 HOTKEY_EXIT_ID = 2
 TRAY_ID = 1
@@ -77,6 +77,9 @@ NIIF_WARNING = 0x00000002
 
 IDI_APPLICATION = 32512
 ERROR_ALREADY_EXISTS = 183
+IMAGE_ICON = 1
+LR_LOADFROMFILE = 0x00000010
+LR_DEFAULTSIZE = 0x00000040
 
 MF_STRING = 0x00000000
 MF_SEPARATOR = 0x00000800
@@ -208,6 +211,15 @@ user32.SetWindowPos.argtypes = [
 user32.SetWindowPos.restype = wintypes.BOOL
 user32.LoadIconW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR]
 user32.LoadIconW.restype = wintypes.HICON
+user32.LoadImageW.argtypes = [
+    wintypes.HINSTANCE,
+    wintypes.LPCWSTR,
+    wintypes.UINT,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.UINT,
+]
+user32.LoadImageW.restype = wintypes.HANDLE
 user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
 user32.GetCursorPos.restype = wintypes.BOOL
 user32.CreatePopupMenu.restype = wintypes.HMENU
@@ -223,6 +235,8 @@ user32.TrackPopupMenu.argtypes = [
 ]
 user32.TrackPopupMenu.restype = wintypes.BOOL
 user32.DestroyMenu.argtypes = [wintypes.HMENU]
+user32.DestroyIcon.argtypes = [wintypes.HICON]
+user32.DestroyIcon.restype = wintypes.BOOL
 user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 
 if ctypes.sizeof(ctypes.c_void_p) == 8:
@@ -236,6 +250,14 @@ else:
 
 shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
 shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+shell32.ExtractIconExW.argtypes = [
+    wintypes.LPCWSTR,
+    ctypes.c_int,
+    ctypes.POINTER(wintypes.HICON),
+    ctypes.POINTER(wintypes.HICON),
+    wintypes.UINT,
+]
+shell32.ExtractIconExW.restype = wintypes.UINT
 
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
@@ -264,7 +286,7 @@ class AlwaysOnTopApp:
         self.mutex = mutex
         self.hinstance = kernel32.GetModuleHandleW(None)
         self.hwnd = wintypes.HWND()
-        self.hicon = user32.LoadIconW(None, wintypes.LPCWSTR(IDI_APPLICATION))
+        self.hicon, self.owns_icon = self._load_app_icon()
         self.wndproc = WNDPROC(self._wndproc)
         self.last_target = wintypes.HWND()
         self.toggle_hotkey_registered = False
@@ -305,6 +327,35 @@ class AlwaysOnTopApp:
             None,
         )
         check(self.hwnd, "CreateWindowExW failed")
+
+    def _load_app_icon(self) -> tuple[wintypes.HICON, bool]:
+        if getattr(sys, "frozen", False):
+            large_icon = wintypes.HICON()
+            small_icon = wintypes.HICON()
+            count = shell32.ExtractIconExW(
+                sys.executable, 0, ctypes.byref(large_icon), ctypes.byref(small_icon), 1
+            )
+            if count and small_icon:
+                if large_icon:
+                    user32.DestroyIcon(large_icon)
+                return small_icon, True
+            if large_icon:
+                return large_icon, True
+
+        icon_file = Path(__file__).resolve().parent / "assets" / "app-icon.ico"
+        if icon_file.exists():
+            icon = user32.LoadImageW(
+                None,
+                str(icon_file),
+                IMAGE_ICON,
+                16,
+                16,
+                LR_LOADFROMFILE | LR_DEFAULTSIZE,
+            )
+            if icon:
+                return wintypes.HICON(icon), True
+
+        return user32.LoadIconW(None, wintypes.LPCWSTR(IDI_APPLICATION)), False
 
     def _notify_data(self, flags: int = 0) -> NOTIFYICONDATAW:
         data = NOTIFYICONDATAW()
@@ -407,6 +458,9 @@ class AlwaysOnTopApp:
         if self.exit_hotkey_registered:
             user32.UnregisterHotKey(self.hwnd, HOTKEY_EXIT_ID)
         self._remove_tray_icon()
+        if self.owns_icon:
+            user32.DestroyIcon(self.hicon)
+            self.owns_icon = False
         if self.mutex:
             kernel32.CloseHandle(self.mutex)
             self.mutex = None
@@ -584,6 +638,7 @@ def main() -> int:
     if os.name != "nt":
         print("This tool only supports Windows.", file=sys.stderr)
         return 1
+    ctypes.set_last_error(0)
     mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
     if not mutex:
         raise ctypes.WinError(ctypes.get_last_error(), "CreateMutexW failed")
