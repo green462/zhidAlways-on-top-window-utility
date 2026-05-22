@@ -519,9 +519,16 @@ class AlwaysOnTopApp:
             self._show_balloon(APP_NAME, f"开机启动设置失败：{exc}", warning=True)
 
     def _create_startup_shortcut(self, link: Path) -> None:
-        script = Path(__file__).resolve()
-        pythonw = Path(sys.executable).with_name("pythonw.exe")
-        target = pythonw if pythonw.exists() else Path(sys.executable)
+        if getattr(sys, "frozen", False):
+            target = Path(sys.executable).resolve()
+            arguments = ""
+            work_dir = target.parent
+        else:
+            script = Path(__file__).resolve()
+            pythonw = Path(sys.executable).with_name("pythonw.exe")
+            target = pythonw if pythonw.exists() else Path(sys.executable)
+            arguments = f'"{script}"'
+            work_dir = script.parent
         link.parent.mkdir(parents=True, exist_ok=True)
 
         ps_command = (
@@ -537,8 +544,8 @@ class AlwaysOnTopApp:
             {
                 "LINK_PATH": str(link),
                 "TARGET_PATH": str(target),
-                "SCRIPT_PATH": f'"{script}"',
-                "WORK_DIR": str(script.parent),
+                "SCRIPT_PATH": arguments,
+                "WORK_DIR": str(work_dir),
                 "ICON_PATH": f"{target},0",
             }
         )
